@@ -53,3 +53,6 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+        # Importar todos los modelos para que SQLAlchemy los registre
+from app.models.user import User  # noqa: F401, E402

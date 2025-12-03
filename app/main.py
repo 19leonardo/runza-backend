@@ -8,8 +8,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.v1.api import api_router
 from app.core.config import settings
 from app.db.base import engine, Base
+
+# Importar modelos para que SQLAlchemy los registre
+from app.models.user import User  # noqa: F401
 
 
 @asynccontextmanager
@@ -95,6 +99,5 @@ async def health_check():
     }
 
 
-# TODO: Incluir routers cuando estén creados
-# from app.api.v1.api import api_router
-# app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+# Incluir router de la API v1
+app.include_router(api_router, prefix=settings.API_V1_PREFIX)   
