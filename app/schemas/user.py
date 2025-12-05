@@ -80,17 +80,18 @@ class UserResponse(BaseModel):
     
     id: int
     email: str
-    full_name: str
+    full_name: Optional[str] = None
     birth_date: Optional[datetime] = None
     weight_kg: Optional[float] = None
     height_cm: Optional[float] = None
     avatar_url: Optional[str] = None
-    is_active: bool
-    is_verified: bool
-    total_points: int
-    current_streak: int
-    longest_streak: int
-    created_at: datetime
+    is_active: bool = True
+    is_verified: bool = False
+    total_points: int = 0
+    current_streak: int = 0
+    longest_streak: int = 0
+    level: int = 1
+    created_at: Optional[datetime] = None
     last_login: Optional[datetime] = None
     
     model_config = ConfigDict(from_attributes=True)
