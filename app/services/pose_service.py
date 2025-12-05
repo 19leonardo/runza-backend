@@ -3,37 +3,46 @@ Servicio de análisis de poses con MediaPipe.
 Detecta poses del cuerpo humano en imágenes.
 """
 
-import mediapipe as mp
-import numpy as np
-import cv2
 import base64
+import numpy as np
 from typing import Optional
 from io import BytesIO
 from PIL import Image
 
+# Importar mediapipe de forma segura
+try:
+    import mediapipe as mp
+    MEDIAPIPE_AVAILABLE = True
+except ImportError:
+    MEDIAPIPE_AVAILABLE = False
+
 
 class PoseService:
     def __init__(self):
-        self.mp_pose = mp.solutions.pose
-        self.mp_drawing = mp.solutions.drawing_utils
-        self.pose = self.mp_pose.Pose(
-            static_image_mode=False,
-            model_complexity=1,
-            smooth_landmarks=True,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5
-        )
+        self.pose = None
+        self.mp_pose = None
+        
+        if MEDIAPIPE_AVAILABLE:
+            try:
+                self.mp_pose = mp.solutions.pose
+                self.pose = self.mp_pose.Pose(
+                    static_image_mode=True,
+                    model_complexity=1,
+                    min_detection_confidence=0.5,
+                    min_tracking_confidence=0.5
+                )
+            except Exception as e:
+                print(f"Error inicializando MediaPipe: {e}")
+                self.pose = None
     
     def decode_base64_image(self, base64_string: str) -> np.ndarray:
         """Decodificar imagen base64 a numpy array"""
-        # Remover el prefijo data:image/...;base64, si existe
         if ',' in base64_string:
             base64_string = base64_string.split(',')[1]
         
         image_data = base64.b64decode(base64_string)
         image = Image.open(BytesIO(image_data))
         
-        # Convertir a RGB si es necesario
         if image.mode != 'RGB':
             image = image.convert('RGB')
         
@@ -44,25 +53,32 @@ class PoseService:
         Analizar pose en una imagen.
         Retorna landmarks y análisis de la pose.
         """
+        if not MEDIAPIPE_AVAILABLE or self.pose is None:
+            return {
+                "success": False,
+                "message": "MediaPipe no está disponible en este servidor",
+                "landmarks": None,
+                "analysis": self._get_demo_analysis()
+            }
+        
         try:
-            # Decodificar imagen
             image = self.decode_base64_image(image_base64)
-            
-            # Convertir BGR a RGB (MediaPipe usa RGB)
-            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            
-            # Procesar con MediaPipe
-            results = self.pose.process(image_rgb)
+            results = self.pose.process(image)
             
             if not results.pose_landmarks:
                 return {
-                    "success": False,
-                    "message": "No se detectó ninguna pose",
+                    "success": True,
+                    "message": "No se detectó ninguna pose en la imagen",
                     "landmarks": None,
-                    "analysis": None
+                    "analysis": {
+                        "posture": "not_detected",
+                        "exercise_detected": None,
+                        "form_score": 0,
+                        "tips": ["Asegúrate de que tu cuerpo completo sea visible en la cámara"],
+                        "angles": {}
+                    }
                 }
             
-            # Extraer landmarks
             landmarks = []
             for idx, landmark in enumerate(results.pose_landmarks.landmark):
                 landmarks.append({
@@ -74,7 +90,6 @@ class PoseService:
                     "visibility": landmark.visibility
                 })
             
-            # Analizar pose
             analysis = self._analyze_exercise(landmarks)
             
             return {
@@ -92,17 +107,34 @@ class PoseService:
                 "analysis": None
             }
     
+    def _get_demo_analysis(self) -> dict:
+        """Retorna un análisis demo cuando MediaPipe no está disponible"""
+        return {
+            "posture": "demo_mode",
+            "exercise_detected": "demo",
+            "form_score": 85,
+            "tips": [
+                "Modo demo activo",
+                "El análisis real requiere MediaPipe",
+                "Mantén buena postura durante el ejercicio"
+            ],
+            "angles": {
+                "left_arm": 90.0,
+                "right_arm": 90.0,
+                "left_leg": 170.0,
+                "right_leg": 170.0
+            }
+        }
+    
     def _analyze_exercise(self, landmarks: list) -> dict:
         """Analizar la pose para determinar el ejercicio y la forma"""
         
-        # Obtener puntos clave
         def get_landmark(name: str):
             for lm in landmarks:
                 if lm["name"] == name:
                     return lm
             return None
         
-        # Puntos importantes
         left_shoulder = get_landmark("LEFT_SHOULDER")
         right_shoulder = get_landmark("RIGHT_SHOULDER")
         left_elbow = get_landmark("LEFT_ELBOW")
@@ -124,7 +156,6 @@ class PoseService:
             "angles": {}
         }
         
-        # Calcular ángulos
         if all([left_shoulder, left_elbow, left_wrist]):
             left_arm_angle = self._calculate_angle(
                 left_shoulder, left_elbow, left_wrist
@@ -149,7 +180,6 @@ class PoseService:
             )
             analysis["angles"]["right_leg"] = round(right_leg_angle, 1)
         
-        # Detectar tipo de ejercicio basado en la pose
         analysis = self._detect_exercise(analysis, landmarks)
         
         return analysis
@@ -174,7 +204,6 @@ class PoseService:
         
         angles = analysis.get("angles", {})
         
-        # Detectar sentadilla (squats)
         left_leg = angles.get("left_leg", 180)
         right_leg = angles.get("right_leg", 180)
         
@@ -190,9 +219,9 @@ class PoseService:
                 analysis["tips"].append("Buena forma, intenta bajar un poco más")
             else:
                 analysis["form_score"] = 60
-                analysis["tips"].append("Intenta bajar más para mejor activación muscular")
+                analysis["tips"].append("Intenta bajar más para mejor activación")
+            return analysis
         
-        # Detectar flexiones (push-ups)
         left_arm = angles.get("left_arm", 180)
         right_arm = angles.get("right_arm", 180)
         
@@ -201,8 +230,8 @@ class PoseService:
             analysis["posture"] = "pushup_down"
             analysis["form_score"] = 85
             analysis["tips"].append("Mantén el core apretado")
+            return analysis
         
-        # Detectar brazos arriba (jumping jacks, etc)
         def get_landmark(name: str):
             for lm in landmarks:
                 if lm["name"] == name:
@@ -220,16 +249,14 @@ class PoseService:
                 analysis["posture"] = "standing_arms_up"
                 analysis["form_score"] = 90
                 analysis["tips"].append("¡Brazos bien arriba!")
+                return analysis
         
-        # Si no se detectó ejercicio específico
-        if not analysis["exercise_detected"]:
-            analysis["exercise_detected"] = "standing"
-            analysis["posture"] = "neutral"
-            analysis["form_score"] = 50
-            analysis["tips"].append("Posición neutral detectada")
+        analysis["exercise_detected"] = "standing"
+        analysis["posture"] = "neutral"
+        analysis["form_score"] = 50
+        analysis["tips"].append("Posición neutral detectada")
         
         return analysis
 
 
-# Instancia global del servicio
 pose_service = PoseService()
