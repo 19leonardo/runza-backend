@@ -19,7 +19,6 @@ class ActivityService:
         if target_date is None:
             target_date = date.today()
         
-        # Buscar stats del día
         stats = db.query(DailyStats).filter(
             DailyStats.user_id == user_id,
             func.date(DailyStats.date) == target_date
@@ -37,11 +36,34 @@ class ActivityService:
         return stats
 
     @staticmethod
+    def ensure_user_fields(user: User) -> None:
+        """Asegurar que los campos del usuario no sean NULL"""
+        if user.total_points is None:
+            user.total_points = 0
+        if user.current_streak is None:
+            user.current_streak = 0
+        if user.longest_streak is None:
+            user.longest_streak = 0
+        if user.level is None:
+            user.level = 1
+        if user.total_exercises is None:
+            user.total_exercises = 0
+        if user.total_meals_logged is None:
+            user.total_meals_logged = 0
+        if user.total_water_glasses is None:
+            user.total_water_glasses = 0
+        if user.total_wellness_activities is None:
+            user.total_wellness_activities = 0
+
+    @staticmethod
     def add_points(db: Session, user_id: int, points: int, point_type: str = "general") -> User:
         """Agregar puntos al usuario y actualizar stats diarios"""
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
             raise ValueError("Usuario no encontrado")
+        
+        # Asegurar que los campos no sean NULL
+        ActivityService.ensure_user_fields(user)
         
         # Actualizar puntos totales del usuario
         user.total_points += points
@@ -52,14 +74,14 @@ class ActivityService:
         
         # Actualizar stats diarios
         daily_stats = ActivityService.get_or_create_daily_stats(db, user_id)
-        daily_stats.total_points += points
+        daily_stats.total_points = (daily_stats.total_points or 0) + points
         
         if point_type == "exercise":
-            daily_stats.exercise_points += points
+            daily_stats.exercise_points = (daily_stats.exercise_points or 0) + points
         elif point_type == "nutrition":
-            daily_stats.nutrition_points += points
+            daily_stats.nutrition_points = (daily_stats.nutrition_points or 0) + points
         elif point_type == "wellness":
-            daily_stats.wellness_points += points
+            daily_stats.wellness_points = (daily_stats.wellness_points or 0) + points
         
         db.commit()
         db.refresh(user)
@@ -82,12 +104,13 @@ class ActivityService:
         
         # Actualizar stats diarios
         daily_stats = ActivityService.get_or_create_daily_stats(db, user_id)
-        daily_stats.exercises_completed += 1
+        daily_stats.exercises_completed = (daily_stats.exercises_completed or 0) + 1
         
         # Agregar puntos
         user = ActivityService.add_points(db, user_id, data.points, "exercise")
         
-        # Actualizar contador total
+        # Asegurar campos y actualizar contador total
+        ActivityService.ensure_user_fields(user)
         user.total_exercises += 1
         
         # Actualizar racha
@@ -104,7 +127,7 @@ class ActivityService:
     @staticmethod
     def log_meal(db: Session, user_id: int, data: MealCreate) -> dict:
         """Registrar comida"""
-        points = 10  # Puntos base por registrar comida
+        points = 10
         
         activity = Activity(
             user_id=user_id,
@@ -119,16 +142,15 @@ class ActivityService:
         )
         db.add(activity)
         
-        # Actualizar stats diarios
         daily_stats = ActivityService.get_or_create_daily_stats(db, user_id)
-        daily_stats.meals_logged += 1
-        daily_stats.total_calories += data.calories
-        daily_stats.total_protein += data.protein
-        daily_stats.total_carbs += data.carbs
-        daily_stats.total_fat += data.fat
+        daily_stats.meals_logged = (daily_stats.meals_logged or 0) + 1
+        daily_stats.total_calories = (daily_stats.total_calories or 0) + data.calories
+        daily_stats.total_protein = (daily_stats.total_protein or 0) + data.protein
+        daily_stats.total_carbs = (daily_stats.total_carbs or 0) + data.carbs
+        daily_stats.total_fat = (daily_stats.total_fat or 0) + data.fat
         
-        # Agregar puntos
         user = ActivityService.add_points(db, user_id, points, "nutrition")
+        ActivityService.ensure_user_fields(user)
         user.total_meals_logged += 1
         
         db.commit()
@@ -153,12 +175,11 @@ class ActivityService:
         )
         db.add(activity)
         
-        # Actualizar stats diarios
         daily_stats = ActivityService.get_or_create_daily_stats(db, user_id)
-        daily_stats.water_glasses += data.glasses
+        daily_stats.water_glasses = (daily_stats.water_glasses or 0) + data.glasses
         
-        # Agregar puntos
         user = ActivityService.add_points(db, user_id, points, "wellness")
+        ActivityService.ensure_user_fields(user)
         user.total_water_glasses += data.glasses
         
         db.commit()
@@ -181,11 +202,9 @@ class ActivityService:
         )
         db.add(activity)
         
-        # Actualizar stats diarios
         daily_stats = ActivityService.get_or_create_daily_stats(db, user_id)
         daily_stats.mood = data.mood
         
-        # Agregar puntos
         user = ActivityService.add_points(db, user_id, data.points, "wellness")
         
         db.commit()
@@ -199,13 +218,12 @@ class ActivityService:
     @staticmethod
     def log_sleep(db: Session, user_id: int, data: SleepCreate) -> dict:
         """Registrar horas de sueño"""
-        # Puntos basados en calidad de sueño
         if 7 <= data.hours <= 9:
-            points = 20  # Óptimo
+            points = 20
         elif 6 <= data.hours < 7 or 9 < data.hours <= 10:
-            points = 10  # Aceptable
+            points = 10
         else:
-            points = 5  # Registrado
+            points = 5
         
         activity = Activity(
             user_id=user_id,
@@ -216,11 +234,9 @@ class ActivityService:
         )
         db.add(activity)
         
-        # Actualizar stats diarios
         daily_stats = ActivityService.get_or_create_daily_stats(db, user_id)
         daily_stats.sleep_hours = data.hours
         
-        # Agregar puntos
         user = ActivityService.add_points(db, user_id, points, "wellness")
         
         db.commit()
@@ -244,12 +260,11 @@ class ActivityService:
         )
         db.add(activity)
         
-        # Actualizar stats diarios
         daily_stats = ActivityService.get_or_create_daily_stats(db, user_id)
-        daily_stats.wellness_activities += 1
+        daily_stats.wellness_activities = (daily_stats.wellness_activities or 0) + 1
         
-        # Agregar puntos
         user = ActivityService.add_points(db, user_id, data.points, "wellness")
+        ActivityService.ensure_user_fields(user)
         user.total_wellness_activities += 1
         
         db.commit()
@@ -267,30 +282,27 @@ class ActivityService:
         if not user:
             return
         
+        ActivityService.ensure_user_fields(user)
+        
         today = date.today()
         yesterday = today - timedelta(days=1)
         
-        # Verificar si hubo actividad ayer
         yesterday_stats = db.query(DailyStats).filter(
             DailyStats.user_id == user_id,
             func.date(DailyStats.date) == yesterday
         ).first()
         
-        if yesterday_stats and yesterday_stats.total_points > 0:
-            # Mantener o incrementar racha
+        if yesterday_stats and (yesterday_stats.total_points or 0) > 0:
             user.current_streak += 1
         else:
-            # Verificar si es el primer día o se perdió la racha
             today_stats = db.query(DailyStats).filter(
                 DailyStats.user_id == user_id,
                 func.date(DailyStats.date) == today
             ).first()
             
-            if not today_stats or today_stats.total_points == 0:
-                # Primera actividad del día, iniciar racha
+            if not today_stats or (today_stats.total_points or 0) == 0:
                 user.current_streak = 1
         
-        # Actualizar mejor racha
         if user.current_streak > user.longest_streak:
             user.longest_streak = user.current_streak
         
@@ -303,33 +315,30 @@ class ActivityService:
         if not user:
             raise ValueError("Usuario no encontrado")
         
+        ActivityService.ensure_user_fields(user)
+        
         today = date.today()
         week_ago = today - timedelta(days=7)
         month_ago = today - timedelta(days=30)
         
-        # Puntos esta semana
         week_stats = db.query(func.sum(DailyStats.total_points)).filter(
             DailyStats.user_id == user_id,
             DailyStats.date >= week_ago
         ).scalar() or 0
         
-        # Puntos este mes
         month_stats = db.query(func.sum(DailyStats.total_points)).filter(
             DailyStats.user_id == user_id,
             DailyStats.date >= month_ago
         ).scalar() or 0
         
-        # Días activos en el último mes
         active_days = db.query(func.count(DailyStats.id)).filter(
             DailyStats.user_id == user_id,
             DailyStats.date >= month_ago,
             DailyStats.total_points > 0
         ).scalar() or 0
         
-        # Promedio diario
         avg_daily = month_stats / 30 if month_stats else 0
         
-        # Categoría de ejercicio favorita
         favorite_category = db.query(
             Activity.category,
             func.count(Activity.id).label('count')
@@ -339,18 +348,17 @@ class ActivityService:
             Activity.category.isnot(None)
         ).group_by(Activity.category).order_by(desc('count')).first()
         
-        # Score de consistencia (días activos / días totales * 100)
         consistency = (active_days / 30) * 100
         
         return {
-            "total_points": user.total_points,
-            "current_streak": user.current_streak,
-            "longest_streak": user.longest_streak,
-            "level": user.level,
-            "total_exercises": user.total_exercises,
-            "total_meals_logged": user.total_meals_logged,
-            "total_water_glasses": user.total_water_glasses,
-            "total_wellness_activities": user.total_wellness_activities,
+            "total_points": user.total_points or 0,
+            "current_streak": user.current_streak or 0,
+            "longest_streak": user.longest_streak or 0,
+            "level": user.level or 1,
+            "total_exercises": user.total_exercises or 0,
+            "total_meals_logged": user.total_meals_logged or 0,
+            "total_water_glasses": user.total_water_glasses or 0,
+            "total_wellness_activities": user.total_wellness_activities or 0,
             "points_this_week": week_stats,
             "points_this_month": month_stats,
             "average_daily_points": round(avg_daily, 1),
