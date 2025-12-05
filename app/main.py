@@ -13,7 +13,7 @@ from app.core.config import settings
 from app.db.base import engine, Base
 
 # Importar modelos para que SQLAlchemy los registre
-from app.models.user import User  # noqa: F401
+from app.models import User, Activity, DailyStats
 
 
 @asynccontextmanager

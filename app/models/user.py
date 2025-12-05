@@ -2,70 +2,52 @@
 Modelo de Usuario - Tabla principal de usuarios del sistema RunZa.
 """
 
-from datetime import datetime, timezone
-from typing import Optional
-
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, Date
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.base import Base
 
 
 class User(Base):
-    """
-    Modelo de usuario para el ecosistema RunZa.
-    Almacena datos de autenticación y perfil del usuario.
-    """
-    
     __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    hashed_password = Column(String(255), nullable=False)
     
-    # Identificador único
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # Perfil
+    full_name = Column(String(100), nullable=True)
+    birth_date = Column(Date, nullable=True)
+    weight_kg = Column(Float, nullable=True)
+    height_cm = Column(Float, nullable=True)
+    avatar_url = Column(String(500), nullable=True)
     
-    # Datos de autenticación
-    email: Mapped[str] = mapped_column(
-        String(255), 
-        unique=True, 
-        index=True, 
-        nullable=False
-    )
-    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Estado
+    is_active = Column(Boolean, default=True)
+    is_verified = Column(Boolean, default=False)
     
-    # Datos personales
-    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    birth_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Gamificación
+    total_points = Column(Integer, default=0)
+    current_streak = Column(Integer, default=0)
+    longest_streak = Column(Integer, default=0)
+    level = Column(Integer, default=1)
     
-    # Datos físicos (opcionales)
-    weight_kg: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    height_cm: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    
-    # Avatar
-    avatar_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    
-    # Estado de la cuenta
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    
-    # Puntos acumulados (core del negocio)
-    total_points: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    
-    # Rachas
-    current_streak: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    longest_streak: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Estadísticas totales
+    total_exercises = Column(Integer, default=0)
+    total_meals_logged = Column(Integer, default=0)
+    total_water_glasses = Column(Integer, default=0)
+    total_wellness_activities = Column(Integer, default=0)
     
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, 
-        default=lambda: datetime.now(timezone.utc),
-        nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-        nullable=False
-    )
-    last_login: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    last_login = Column(DateTime(timezone=True), nullable=True)
+    last_activity = Column(DateTime(timezone=True), nullable=True)
     
+    # Relaciones
+    activities = relationship("Activity", back_populates="user", cascade="all, delete-orphan")
+    daily_stats = relationship("DailyStats", back_populates="user", cascade="all, delete-orphan")
+
     def __repr__(self) -> str:
-        return f"<User(id={self.id}, email='{self.email}', name='{self.full_name}')>"
+        return f"<User(id={self.id}, email='{self.email}')>"
