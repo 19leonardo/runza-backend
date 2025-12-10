@@ -1,42 +1,64 @@
 """
 Módulo de seguridad - Manejo de contraseñas y tokens JWT.
-Implementa las mejores prácticas de seguridad para autenticación.
 """
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Union
 
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from app.core.config import settings
-
-# Contexto para hashing de contraseñas con bcrypt
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Límite de bcrypt para contraseñas
 BCRYPT_MAX_LENGTH = 72
 
+# Importar bcrypt de forma segura
+try:
+    import bcrypt
+    BCRYPT_AVAILABLE = True
+except ImportError:
+    BCRYPT_AVAILABLE = False
 
-def _truncate_password(password: str) -> str:
+
+def _truncate_password(password: str) -> bytes:
     """
-    Trunca la contraseña a 72 bytes (límite de bcrypt).
+    Trunca la contraseña a 72 bytes (límite de bcrypt) y la convierte a bytes.
     """
-    return password[:BCRYPT_MAX_LENGTH]
+    password_bytes = password.encode('utf-8')
+    return password_bytes[:BCRYPT_MAX_LENGTH]
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     Verifica si una contraseña en texto plano coincide con el hash.
     """
-    return pwd_context.verify(_truncate_password(plain_password), hashed_password)
+    if not BCRYPT_AVAILABLE:
+        return False
+    
+    try:
+        password_bytes = _truncate_password(plain_password)
+        hashed_bytes = hashed_password.encode('utf-8')
+        return bcrypt.checkpw(password_bytes, hashed_bytes)
+    except Exception as e:
+        print(f"Error verificando password: {e}")
+        return False
 
 
 def get_password_hash(password: str) -> str:
     """
     Genera hash seguro de una contraseña usando bcrypt.
     """
-    return pwd_context.hash(_truncate_password(password))
+    if not BCRYPT_AVAILABLE:
+        raise ValueError("bcrypt no disponible")
+    
+    try:
+        password_bytes = _truncate_password(password)
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(password_bytes, salt)
+        return hashed.decode('utf-8')
+    except Exception as e:
+        print(f"Error hasheando password: {e}")
+        raise ValueError(f"Error al procesar contraseña: {e}")
 
 
 def create_access_token(
@@ -73,7 +95,7 @@ def create_refresh_token(
     expires_delta: Optional[timedelta] = None
 ) -> str:
     """
-    Crea un JWT refresh token (mayor duración que access token).
+    Crea un JWT refresh token.
     """
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
