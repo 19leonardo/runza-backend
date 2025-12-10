@@ -14,32 +14,29 @@ from app.core.config import settings
 # Contexto para hashing de contraseñas con bcrypt
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# Límite de bcrypt para contraseñas
+BCRYPT_MAX_LENGTH = 72
+
+
+def _truncate_password(password: str) -> str:
+    """
+    Trunca la contraseña a 72 bytes (límite de bcrypt).
+    """
+    return password[:BCRYPT_MAX_LENGTH]
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     Verifica si una contraseña en texto plano coincide con el hash.
-    
-    Args:
-        plain_password: Contraseña ingresada por el usuario
-        hashed_password: Hash almacenado en base de datos
-        
-    Returns:
-        True si coinciden, False si no
     """
-    return pwd_context.verify(plain_password, hashed_password)
+    return pwd_context.verify(_truncate_password(plain_password), hashed_password)
 
 
 def get_password_hash(password: str) -> str:
     """
     Genera hash seguro de una contraseña usando bcrypt.
-    
-    Args:
-        password: Contraseña en texto plano
-        
-    Returns:
-        Hash bcrypt de la contraseña
     """
-    return pwd_context.hash(password)
+    return pwd_context.hash(_truncate_password(password))
 
 
 def create_access_token(
@@ -48,13 +45,6 @@ def create_access_token(
 ) -> str:
     """
     Crea un JWT access token.
-    
-    Args:
-        subject: ID del usuario (normalmente user.id)
-        expires_delta: Tiempo de expiración opcional
-        
-    Returns:
-        Token JWT codificado
     """
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
@@ -84,13 +74,6 @@ def create_refresh_token(
 ) -> str:
     """
     Crea un JWT refresh token (mayor duración que access token).
-    
-    Args:
-        subject: ID del usuario
-        expires_delta: Tiempo de expiración opcional
-        
-    Returns:
-        Token JWT codificado para refresh
     """
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
@@ -117,12 +100,6 @@ def create_refresh_token(
 def decode_token(token: str) -> Optional[dict]:
     """
     Decodifica y valida un token JWT.
-    
-    Args:
-        token: Token JWT a decodificar
-        
-    Returns:
-        Payload del token si es válido, None si no
     """
     try:
         payload = jwt.decode(
