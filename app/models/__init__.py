@@ -1,4 +1,4 @@
-from app.models.user import User
+from app.models.user import User, user_contacts
 from app.models.activity import Activity, DailyStats
 from app.models.exercise_detection import (
     ExerciseDetection,
@@ -6,13 +6,18 @@ from app.models.exercise_detection import (
     ExerciseScoringRule,
     ExerciseTip
 )
+from app.models.chat import Conversation, ConversationParticipant, Message
 
 __all__ = [
     "User",
-    "Activity", 
+    "user_contacts",
+    "Activity",
     "DailyStats",
     "ExerciseDetection",
     "ExerciseAngleRule",
     "ExerciseScoringRule",
-    "ExerciseTip"
+    "ExerciseTip",
+    "Conversation",
+    "ConversationParticipant",
+    "Message"
 ]
