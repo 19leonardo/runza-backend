@@ -4,7 +4,7 @@ Servicio de Chat - Lógica de negocio para mensajería.
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, desc, func
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.models.user import User, user_contacts
 from app.models.chat import Conversation, ConversationParticipant, Message
@@ -72,6 +72,15 @@ class ChatService:
         return contact
     
     @staticmethod
+    def _normalize_datetime(dt: Optional[datetime]) -> datetime:
+        """Normalizar datetime para comparación (agregar timezone si no tiene)"""
+        if dt is None:
+            return datetime.min.replace(tzinfo=timezone.utc)
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt
+    
+    @staticmethod
     def get_contacts(db: Session, user_id: int) -> List[ContactResponse]:
         """Obtener lista de contactos con info de último mensaje"""
         user = db.query(User).filter(User.id == user_id).first()
@@ -107,7 +116,11 @@ class ChatService:
                 ).first()
                 
                 if participant:
-                    last_read = participant.last_read_at or datetime.min
+                    last_read = participant.last_read_at or datetime.min.replace(tzinfo=timezone.utc)
+                    # Normalizar last_read si no tiene timezone
+                    if last_read.tzinfo is None:
+                        last_read = last_read.replace(tzinfo=timezone.utc)
+                    
                     unread_count = db.query(Message).filter(
                         Message.conversation_id == conversation.id,
                         Message.sender_id != user_id,
@@ -119,7 +132,7 @@ class ChatService:
                 email=contact.email,
                 full_name=contact.full_name,
                 avatar_url=contact.avatar_url,
-                is_online=contact.is_online,
+                is_online=contact.is_online if contact.is_online is not None else False,
                 last_seen=contact.last_seen,
                 last_message=last_message,
                 last_message_time=last_message_time,
@@ -127,9 +140,9 @@ class ChatService:
                 conversation_id=conversation_id
             ))
         
-        # Ordenar por último mensaje
+        # Ordenar por último mensaje (usando función de normalización)
         contacts_response.sort(
-            key=lambda x: x.last_message_time or datetime.min,
+            key=lambda x: ChatService._normalize_datetime(x.last_message_time),
             reverse=True
         )
         
@@ -213,7 +226,7 @@ class ChatService:
         messages.reverse()  # Ordenar de más antiguo a más nuevo
         
         # Marcar como leídos
-        participant.last_read_at = datetime.utcnow()
+        participant.last_read_at = datetime.now(timezone.utc)
         db.commit()
         
         return [
@@ -258,10 +271,10 @@ class ChatService:
         # Actualizar timestamp de conversación
         conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
         if conversation:
-            conversation.updated_at = datetime.utcnow()
+            conversation.updated_at = datetime.now(timezone.utc)
         
         # Actualizar last_read del sender
-        participant.last_read_at = datetime.utcnow()
+        participant.last_read_at = datetime.now(timezone.utc)
         
         db.commit()
         db.refresh(message)
@@ -285,5 +298,5 @@ class ChatService:
         user = db.query(User).filter(User.id == user_id).first()
         if user:
             user.is_online = is_online
-            user.last_seen = datetime.utcnow()
+            user.last_seen = datetime.now(timezone.utc)
             db.commit()
